@@ -1,4 +1,4 @@
-"""kabutobot - 株式ペーパートレード自動売買Bot"""
+"""kabutobot - 株式スーパー分析ボット"""
 import io
 import logging
 import signal
@@ -14,7 +14,10 @@ from config import DASHBOARD_PORT, WatchlistManager
 from kabuto_agent import KabutoAgent
 from dashboard import create_app
 from paper_trader import PaperTrader
+from portfolio import PortfolioManager
+from price_alert_manager import PriceAlertManager
 from scheduler import create_scheduler, add_agent_job
+from settings import SettingsManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,16 +41,21 @@ def main():
 
     trader    = PaperTrader()
     watchlist = WatchlistManager()
-    agent     = KabutoAgent(trader, watchlist, notifier)
+    settings  = SettingsManager()
+    portfolio = PortfolioManager()
+    alerts    = PriceAlertManager()
 
-    # スケジューラー起動
+    agent = KabutoAgent(trader, watchlist, notifier,
+                        settings_manager=settings, alert_manager=alerts)
+
     sched = create_scheduler(trader, watchlist, notifier)
     add_agent_job(sched, agent)
     sched.start()
     log.info("[Scheduler] スケジューラー起動完了（エージェント10分ごと）")
 
-    # ダッシュボード起動（別スレッド）
-    app = create_app(trader, watchlist, notifier, agent=agent)
+    app = create_app(trader, watchlist, notifier, agent=agent,
+                     settings_manager=settings, portfolio_manager=portfolio,
+                     alert_manager=alerts)
     threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=DASHBOARD_PORT,
                                debug=False, use_reloader=False),
@@ -56,11 +64,9 @@ def main():
     ).start()
     log.info(f"[Dashboard] http://0.0.0.0:{DASHBOARD_PORT} 起動")
 
-    # 初回エージェントサイクルをバックグラウンドで即時実行
     threading.Thread(target=agent.cycle, daemon=True, name="agent-init").start()
     log.info("[Agent] 初回スキャン開始（バックグラウンド）")
 
-    # Graceful shutdown
     def shutdown(signum, frame):
         log.info("=== kabutobot 停止 ===")
         sched.shutdown(wait=False)

@@ -1,6 +1,6 @@
 """
 自律分析エージェント
-10分ごとに全銘柄スキャン・シグナル変化を通知・PTS監視・感情分析
+10分ごとに全銘柄スキャン・シグナル変化を通知・PTS監視・感情分析・価格アラート確認
 売買は人間が行う。エージェントは分析・通知のみ。
 """
 import json
@@ -35,10 +35,13 @@ EXTRA_JP = ["6098.T", "4063.T", "6902.T", "8035.T", "4568.T", "9983.T", "3659.T"
 
 
 class KabutoAgent:
-    def __init__(self, trader, watchlist_manager, notifier_mod):
+    def __init__(self, trader, watchlist_manager, notifier_mod,
+                 settings_manager=None, alert_manager=None):
         self.trader    = trader
         self.watchlist = watchlist_manager
         self.notifier  = notifier_mod
+        self.settings  = settings_manager
+        self.alerts    = alert_manager
         self._prev_signals: dict  = {}
         self._sentiment_cycle: int = 0
 
@@ -56,6 +59,10 @@ class KabutoAgent:
             self._check_pts()
         except Exception as e:
             log.warning(f"[Agent] PTS確認失敗: {e}")
+        try:
+            self._check_price_alerts()
+        except Exception as e:
+            log.warning(f"[Agent] 価格アラート確認失敗: {e}")
         try:
             self._scan_extra()
         except Exception as e:
@@ -93,7 +100,9 @@ class KabutoAgent:
     def _scan_watchlist(self):
         all_stocks = self.watchlist.get_jp() + self.watchlist.get_us()
 
-        # 既存キャッシュを読み込んで感情・PTS を引き継ぎ
+        ob = self.settings.get("rsi_overbought", 70) if self.settings else 70
+        os = self.settings.get("rsi_oversold",   30) if self.settings else 30
+
         existing = {}
         if ANALYSIS_CACHE_FILE.exists():
             try:
@@ -107,7 +116,7 @@ class KabutoAgent:
         for stock in all_stocks:
             ticker = stock["ticker"]
             try:
-                result = analyze(ticker)
+                result = analyze(ticker, rsi_overbought=ob, rsi_oversold=os)
                 if result is None:
                     continue
 
@@ -124,14 +133,12 @@ class KabutoAgent:
 
                 result["name"] = stock.get("name", ticker)
 
-                # 感情・PTS は既存キャッシュから引き継ぎ
                 for key in ("sentiment", "pts"):
                     if ticker in existing and key in existing[ticker]:
                         result[key] = existing[ticker][key]
 
                 cache[ticker] = result
 
-                # シグナル変化のみ通知（売買は人間が行う）
                 prev_sig = self._prev_signals.get(ticker)
                 curr_sig = result["signal"]
                 if prev_sig is not None and prev_sig != curr_sig:
@@ -145,7 +152,6 @@ class KabutoAgent:
         log.info(f"[Agent] 分析キャッシュ更新: {len(cache)}銘柄")
 
     def _on_signal_change(self, ticker: str, old: str, new: str, result: dict):
-        """シグナル変化を記録・通知（自動売買なし）"""
         from scheduler import log_signal
         log_signal(result)
         name = result.get("name", ticker)
@@ -157,6 +163,7 @@ class KabutoAgent:
                 f"銘柄: {ticker}\n価格: {result['price']}\n"
                 f"理由: {result['reason']}\nRSI: {result['rsi']:.1f}",
                 0x34C759,
+                self.settings,
             )
         elif new == "SELL":
             msg = f"🔴 {name}({ticker}) SELL @ {result['price']} — {result['reason']}"
@@ -165,6 +172,7 @@ class KabutoAgent:
                 f"銘柄: {ticker}\n価格: {result['price']}\n"
                 f"理由: {result['reason']}\nRSI: {result['rsi']:.1f}",
                 0xFF3B30,
+                self.settings,
             )
         else:
             msg = f"📊 {name}({ticker}) シグナル変化: {old} → {new}"
@@ -175,6 +183,7 @@ class KabutoAgent:
     def _check_pts(self):
         all_stocks = self.watchlist.get_jp() + self.watchlist.get_us()
         alerts = check_pts_alerts(all_stocks, threshold_pct=1.0)
+        threshold = self.settings.get("pts_alert_pct", 3.0) if self.settings else 3.0
 
         pts_map: dict = {}
         for a in alerts:
@@ -184,18 +193,18 @@ class KabutoAgent:
                 f"{a['pts_change_pct']:+.2f}% @ {a['pts_price']} ({a['pts_type']})"
             )
             _add_log(msg)
-            if abs(a["pts_change_pct"]) >= 3.0:
+            if abs(a["pts_change_pct"]) >= threshold:
                 _discord_notify(
                     f"⏰ PTS大変動 [{a.get('name', a['ticker'])}]",
                     f"銘柄: {a['ticker']}\n"
                     f"通常値: {a['regular_price']} → PTS: {a['pts_price']}\n"
                     f"変動率: {a['pts_change_pct']:+.2f}%",
                     0xFF9F0A,
+                    self.settings,
                 )
 
         _save(PTS_CACHE_FILE, {"data": pts_map, "updated": _now()})
 
-        # 分析キャッシュに PTS データを書き込む
         if pts_map and ANALYSIS_CACHE_FILE.exists():
             try:
                 c = json.loads(ANALYSIS_CACHE_FILE.read_text(encoding="utf-8"))
@@ -207,6 +216,32 @@ class KabutoAgent:
                 )
             except Exception:
                 pass
+
+    # ── 価格アラートチェック ──
+
+    def _check_price_alerts(self):
+        if not self.alerts or not ANALYSIS_CACHE_FILE.exists():
+            return
+        try:
+            cache = json.loads(ANALYSIS_CACHE_FILE.read_text("utf-8")).get("data", {})
+            for ticker, data in cache.items():
+                price = data.get("price", 0)
+                if not price:
+                    continue
+                for idx, alert in self.alerts.check(ticker, price):
+                    name    = alert.get("name", ticker)
+                    dir_str = "以上に到達" if alert["direction"] == "above" else "以下に到達"
+                    msg = f"🔔 価格アラート [{name}] {price} が {alert['target_price']} {dir_str}"
+                    _add_log(msg)
+                    _discord_notify(
+                        f"🔔 価格アラート [{name}]",
+                        f"銘柄: {ticker}\n現在価格: {price}\n"
+                        f"目標価格: {alert['target_price']} {dir_str}",
+                        0x00C7BE,
+                        self.settings,
+                    )
+        except Exception as e:
+            log.warning(f"[Agent] 価格アラート確認失敗: {e}")
 
     # ── 感情分析更新（40分に1回）──
 
@@ -224,7 +259,6 @@ class KabutoAgent:
 
         _save(SENTIMENT_CACHE_FILE, {"data": sent_map, "updated": _now()})
 
-        # 分析キャッシュに感情スコアを書き込む
         if ANALYSIS_CACHE_FILE.exists():
             try:
                 c = json.loads(ANALYSIS_CACHE_FILE.read_text(encoding="utf-8"))
@@ -259,6 +293,7 @@ class KabutoAgent:
                         f"ゴールデンクロス発生\n価格: {result['price']}\n"
                         f"RSI: {result['rsi']:.1f}\n→ 監視銘柄への追加を推奨",
                         0x00CED1,
+                        self.settings,
                     )
             except Exception:
                 pass
@@ -289,13 +324,20 @@ def _add_log(message: str):
     _save(AGENT_LOG_FILE, logs[-300:])
 
 
-def _discord_notify(title: str, desc: str, color: int):
-    if not DISCORD_WEBHOOK_URL:
+def _discord_notify(title: str, desc: str, color: int, settings=None):
+    url     = DISCORD_WEBHOOK_URL
+    enabled = True
+    if settings:
+        s_url = settings.get("discord_webhook", "")
+        if s_url:
+            url = s_url
+        enabled = settings.get("discord_enabled", True)
+    if not url or not enabled:
         return
     try:
         import requests
         requests.post(
-            DISCORD_WEBHOOK_URL,
+            url,
             json={"embeds": [{"title": title, "description": desc, "color": color}]},
             timeout=5,
         )

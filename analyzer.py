@@ -37,7 +37,7 @@ def _calc_rsi(series: pd.Series, period: int = RSI_PERIOD) -> pd.Series:
     return 100 - (100 / (1 + rs))
 
 
-def analyze(ticker: str) -> dict | None:
+def analyze(ticker: str, rsi_overbought: int | None = None, rsi_oversold: int | None = None) -> dict | None:
     """
     銘柄を分析してシグナルを返す。
     戻り値例:
@@ -62,6 +62,9 @@ def analyze(ticker: str) -> dict | None:
     curr_r = float(rsi.iloc[-1])
     price  = float(close.iloc[-1])
 
+    ob = rsi_overbought if rsi_overbought is not None else RSI_OVERBOUGHT
+    os = rsi_oversold   if rsi_oversold   is not None else RSI_OVERSOLD
+
     is_golden = (prev_s <= prev_l) and (curr_s > curr_l)
     is_dead   = (prev_s >= prev_l) and (curr_s < curr_l)
 
@@ -71,16 +74,16 @@ def analyze(ticker: str) -> dict | None:
 
     if is_golden:
         cross = "golden"
-        if curr_r < RSI_OVERBOUGHT:
+        if curr_r < ob:
             signal, reason = "BUY", f"ゴールデンクロス (RSI={curr_r:.1f})"
         else:
-            reason = f"ゴールデンクロスだが買われすぎ (RSI={curr_r:.1f}>{RSI_OVERBOUGHT})"
+            reason = f"ゴールデンクロスだが買われすぎ (RSI={curr_r:.1f}>{ob})"
     elif is_dead:
         cross = "dead"
-        if curr_r > RSI_OVERSOLD:
+        if curr_r > os:
             signal, reason = "SELL", f"デッドクロス (RSI={curr_r:.1f})"
         else:
-            reason = f"デッドクロスだが売られすぎ (RSI={curr_r:.1f}<{RSI_OVERSOLD})"
+            reason = f"デッドクロスだが売られすぎ (RSI={curr_r:.1f}<{os})"
     elif curr_s > curr_l:
         reason = "短期MA > 長期MA (上昇トレンド中)"
     else:

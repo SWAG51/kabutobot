@@ -67,13 +67,25 @@ class KabutoAgent:
             self._scan_extra()
         except Exception as e:
             log.warning(f"[Agent] 機会探索失敗: {e}")
-        # 感情分析は4サイクル(40分)に1回
         self._sentiment_cycle += 1
+        # 感情分析は4サイクル(40分)に1回
         if self._sentiment_cycle % 4 == 1:
             try:
                 self._update_sentiment()
             except Exception as e:
                 log.warning(f"[Agent] 感情分析失敗: {e}")
+        # ニュースキャッシュは3サイクル(30分)に1回
+        if self._sentiment_cycle % 3 == 1:
+            try:
+                self._refresh_news()
+            except Exception as e:
+                log.warning(f"[Agent] ニュース更新失敗: {e}")
+        # 基本情報キャッシュは6サイクル(60分)に1回
+        if self._sentiment_cycle % 6 == 1:
+            try:
+                self._refresh_fundamentals()
+            except Exception as e:
+                log.warning(f"[Agent] 基本情報更新失敗: {e}")
         log.info("[Agent] ─── サイクル完了 ───")
 
     # ── 市場指数更新 ──
@@ -272,6 +284,36 @@ class KabutoAgent:
                 pass
 
         log.info(f"[Agent] 感情分析更新: {len(sent_map)}銘柄")
+
+    # ── ニュースキャッシュ事前更新（30分に1回）──
+
+    def _refresh_news(self):
+        from news_fetcher import get_news
+        all_stocks = self.watchlist.get_jp() + self.watchlist.get_us()
+        count = 0
+        for stock in all_stocks:
+            ticker = stock["ticker"]
+            try:
+                get_news(ticker, stock.get("name", ""))
+                count += 1
+            except Exception:
+                pass
+        log.info(f"[Agent] ニュースキャッシュ更新: {count}銘柄")
+
+    # ── 基本情報キャッシュ事前更新（60分に1回）──
+
+    def _refresh_fundamentals(self):
+        from valuation import get_fundamentals
+        all_stocks = self.watchlist.get_jp() + self.watchlist.get_us()
+        count = 0
+        for stock in all_stocks:
+            ticker = stock["ticker"]
+            try:
+                get_fundamentals(ticker)
+                count += 1
+            except Exception:
+                pass
+        log.info(f"[Agent] 基本情報キャッシュ更新: {count}銘柄")
 
     # ── 監視外銘柄の機会探索 ──
 

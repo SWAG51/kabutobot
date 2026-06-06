@@ -288,12 +288,50 @@ tr:hover td{background:#fafafa}
 .bt-kv .bv{font-size:18px;font-weight:700}
 .bt-divider{border:none;border-top:1px solid var(--bd);margin:16px 0}
 
+/* ── Modal Inner Tabs ── */
+.mtabs{display:flex;gap:0;border-bottom:1px solid var(--bd);margin:0 -24px 16px;padding:0 24px;overflow-x:auto}
+.mtb{padding:9px 14px;border:none;background:none;cursor:pointer;
+  font-size:12px;font-weight:500;color:var(--sub);white-space:nowrap;
+  border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s;flex-shrink:0}
+.mtb.active{color:var(--b);border-bottom-color:var(--b)}
+.mtc{display:none}.mtc.active{display:block}
+
+/* ── Fundamentals ── */
+.fund-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:14px}
+.fund-kv{background:#f5f5f7;border-radius:8px;padding:10px 14px}
+.fund-kv .fk{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px;font-weight:600}
+.fund-kv .fv{font-size:16px;font-weight:700;line-height:1.2}
+.fund-kv .fn{font-size:10px;color:var(--sub);margin-top:2px}
+.fund-section{margin-bottom:16px}
+.fund-section h4{font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;
+  letter-spacing:.4px;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--bd)}
+
+/* ── Valuation ── */
+.val-box{background:linear-gradient(135deg,#f0f8ff,#e8f5e9);
+  border-radius:10px;padding:14px 16px;margin-bottom:14px;border:1px solid rgba(0,120,255,.15)}
+.val-box .vb-label{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;font-weight:600}
+.val-box .vb-price{font-size:24px;font-weight:700;margin-bottom:2px}
+.val-box .vb-note{font-size:10px;color:var(--sub);line-height:1.5;margin-top:4px}
+
+/* ── Fund Screener ── */
+.fsc-row{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bd);gap:10px;flex-wrap:wrap}
+.fsc-row:last-child{border-bottom:none}
+.fsc-row:hover{background:#fafafa}
+.fsc-info{flex:1;min-width:100px;cursor:pointer}
+.fsc-info:hover .fsc-name{color:var(--b)}
+.fsc-name{font-size:13px;font-weight:600}
+.fsc-ticker{font-size:11px;color:var(--sub)}
+.fsc-metrics{display:flex;gap:10px;flex-wrap:wrap}
+.fsc-m{font-size:11px;color:var(--sub);white-space:nowrap}
+.fsc-m b{color:var(--tx)}
+
 /* ── Responsive ── */
 @media(max-width:600px){
   .wlg{grid-template-columns:1fr}
   .h-actions{gap:6px}
   header .sub{display:none}
   .sr-note{margin-left:0}
+  .fund-grid{grid-template-columns:1fr 1fr}
 }
 </style>
 </head>
@@ -371,6 +409,25 @@ tr:hover td{background:#fafafa}
 
     <!-- スクリーナー -->
     <div id="tab-screener" class="tc">
+      <!-- ファンダメンタルスクリーナー (監視銘柄) -->
+      <div style="margin-bottom:18px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:14px;font-weight:600">📊 ファンダメンタル スクリーナー</span>
+          <span class="ts">監視銘柄のみ</span>
+          <div style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap" id="fs-filters">
+            <button class="fb active" data-ftype="sig" data-fval="all"  onclick="fscFilter('all','sig')">全シグナル</button>
+            <button class="fb buy"    data-ftype="sig" data-fval="buy"  onclick="fscFilter('buy','sig')">🟢 BUY</button>
+            <button class="fb sell"   data-ftype="sig" data-fval="sell" onclick="fscFilter('sell','sig')">🔴 SELL</button>
+            <button class="fb"        data-ftype="cross" data-fval="golden" onclick="fscFilter('golden','cross')">✨ ゴールデン</button>
+            <button class="fb"        data-ftype="cross" data-fval="dead"   onclick="fscFilter('dead','cross')">💀 デッド</button>
+          </div>
+        </div>
+        <div id="fsc-body" style="background:var(--card);border-radius:8px;border:1px solid var(--bd)">
+          <div class="empty"><span class="spinner"></span> 読み込み中...</div>
+        </div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bd);margin:0 0 16px">
+      <!-- 銘柄スクリーナー (全銘柄リスト) -->
       <div style="margin-bottom:14px">
         <input id="sc-search" type="text" placeholder="🔍 銘柄名・ティッカーで検索（全カテゴリ）..."
           oninput="filterScreener()"
@@ -444,7 +501,7 @@ tr:hover td{background:#fafafa}
   </div>
 </div>
 
-<!-- Chart Modal -->
+<!-- Stock Detail Modal -->
 <div class="overlay" id="overlay" onclick="closeModal(event)">
   <div class="modal">
     <div class="modal-head">
@@ -454,22 +511,45 @@ tr:hover td{background:#fafafa}
       </div>
       <button class="close-btn" onclick="closeOverlay()">✕</button>
     </div>
-    <div class="modal-kv" id="modal-stats"><span class="spinner"></span></div>
-    <div id="modal-pts"></div>
-    <div class="chart-label">価格 + 移動平均 + ボリンジャーバンド</div>
-    <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
-    <div class="chart-label">MACD (12, 26, 9)</div>
-    <div class="chart-wrap-md"><canvas id="macd-chart"></canvas></div>
-    <div class="chart-label">RSI (14日)</div>
-    <div class="chart-wrap-sm"><canvas id="rsi-chart"></canvas></div>
-    <div id="modal-news" style="display:none;margin-top:4px"></div>
-    <hr class="bt-divider">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <span style="font-size:13px;font-weight:600">📊 バックテスト (過去1年 / RSI+MAクロス戦略)</span>
-      <button class="btn btn-outline btn-sm" id="bt-btn" onclick="runBacktest()">実行</button>
+    <div class="mtabs">
+      <button class="mtb active" onclick="openModalTab('chart')">📈 チャート</button>
+      <button class="mtb" onclick="openModalTab('fund')">📋 基本情報</button>
+      <button class="mtb" onclick="openModalTab('news')">📰 ニュース</button>
+      <button class="mtb" onclick="openModalTab('val')">💰 評価・分析</button>
+      <button class="mtb" onclick="openModalTab('bt')">🧪 バックテスト</button>
     </div>
-    <div id="modal-backtest" style="min-height:32px">
-      <div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>
+    <!-- Tab: チャート -->
+    <div class="mtc active" id="mtc-chart">
+      <div class="modal-kv" id="modal-stats"><span class="spinner"></span></div>
+      <div id="modal-pts"></div>
+      <div class="chart-label">価格 + 移動平均 + ボリンジャーバンド</div>
+      <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
+      <div class="chart-label">MACD (12, 26, 9)</div>
+      <div class="chart-wrap-md"><canvas id="macd-chart"></canvas></div>
+      <div class="chart-label">RSI (14日)</div>
+      <div class="chart-wrap-sm"><canvas id="rsi-chart"></canvas></div>
+    </div>
+    <!-- Tab: 基本情報 -->
+    <div class="mtc" id="mtc-fund">
+      <div id="modal-fund-body"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+    </div>
+    <!-- Tab: ニュース -->
+    <div class="mtc" id="mtc-news">
+      <div id="modal-news-body"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+    </div>
+    <!-- Tab: 評価・分析 -->
+    <div class="mtc" id="mtc-val">
+      <div id="modal-val-body"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+    </div>
+    <!-- Tab: バックテスト -->
+    <div class="mtc" id="mtc-bt">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:13px;font-weight:600">📊 バックテスト (過去1年 / RSI+MAクロス戦略)</span>
+        <button class="btn btn-outline btn-sm" id="bt-btn" onclick="runBacktest()">実行</button>
+      </div>
+      <div id="modal-backtest">
+        <div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>
+      </div>
     </div>
   </div>
 </div>
@@ -685,7 +765,7 @@ function showTab(name) {
 function loadTab(n) {
   if (n==='signals')   loadSignals();
   else if (n==='wl')   loadWatchlist();
-  else if (n==='screener')  loadScreener();
+  else if (n==='screener')  { loadScreener(); loadFundScreener(); }
   else if (n==='portfolio') loadPortfolio();
   else if (n==='alerts')    loadAlerts();
   else if (n==='agent')     loadAgentLog();
@@ -1005,17 +1085,38 @@ async function testDiscord() {
 }
 
 // ─── Chart Modal ───
+let _modalTicker = null;
+let _modalLoaded = {chart:false, fund:false, news:false, val:false};
+
+function openModalTab(name) {
+  const tabNames = ['chart','fund','news','val','bt'];
+  document.querySelectorAll('.mtb').forEach((b,i) =>
+    b.classList.toggle('active', tabNames[i] === name));
+  document.querySelectorAll('.mtc').forEach(c => c.classList.remove('active'));
+  const el = $('mtc-'+name);
+  if (el) el.classList.add('active');
+  if (name==='fund' && !_modalLoaded.fund) loadModalFundamentals();
+  if (name==='news' && !_modalLoaded.news) loadModalNews();
+  if (name==='val'  && !_modalLoaded.val)  loadModalValuation();
+}
+
 async function openChart(ticker, name) {
-  _btTicker = ticker;
+  _modalTicker = ticker;
+  _btTicker    = ticker;
+  _modalLoaded = {chart:false, fund:false, news:false, val:false};
   const dispName = name && name !== ticker ? name : ticker;
   $('modal-title').textContent = dispName;
-  $('modal-sub').textContent   = ticker + ' | 60日チャート | MA / BB / MACD / RSI';
+  $('modal-sub').textContent   = ticker + ' | 分析ダッシュボード';
   $('modal-stats').innerHTML   = '<span class="spinner"></span>';
   $('modal-pts').innerHTML     = '';
-  $('modal-news').style.display = 'none';
-  $('modal-backtest').innerHTML = '<div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>';
+  $('modal-fund-body').innerHTML = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-news-body').innerHTML = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-val-body').innerHTML  = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-backtest').innerHTML  = '<div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>';
   const btn = $('bt-btn');
   if (btn) { btn.innerHTML = '実行'; btn.disabled = false; }
+  document.querySelectorAll('.mtb').forEach((b,i) => b.classList.toggle('active', i===0));
+  document.querySelectorAll('.mtc').forEach((c,i) => c.classList.toggle('active', i===0));
   $('overlay').classList.add('open');
 
   try {
@@ -1024,6 +1125,7 @@ async function openChart(ticker, name) {
       (await fetch('/api/analysis')).json(),
     ]);
     if (d.error) { $('modal-stats').textContent = d.error; return; }
+    _modalLoaded.chart = true;
 
     const ac    = (analysis.data || {})[ticker] || {};
     const last  = (d.close  || []).filter(Boolean).slice(-1)[0] || 0;
@@ -1035,9 +1137,9 @@ async function openChart(ticker, name) {
     const isJpy = ticker.endsWith('.T');
     const fmt = v => isJpy ? '¥'+Math.round(v).toLocaleString() : '$'+v.toFixed(2);
 
-    const sigBadge = ac.signal === 'BUY'
+    const sigBadge = ac.signal==='BUY'
       ? '<span class="badge bb">🟢 BUY</span>'
-      : ac.signal === 'SELL'
+      : ac.signal==='SELL'
       ? '<span class="badge bs">🔴 SELL</span>'
       : '<span class="badge bh">HOLD</span>';
 
@@ -1105,45 +1207,255 @@ async function openChart(ticker, name) {
           y:{min:0,max:100,ticks:{font:{size:10},callback:v=>[30,50,70].includes(v)?v:''},
             grid:{color:ctx=>ctx.tick.value===70?'rgba(255,59,48,.25)':ctx.tick.value===30?'rgba(52,199,89,.25)':'rgba(0,0,0,.04)'}}}}
     });
-
-    $('modal-news').style.display = '';
-    $('modal-news').innerHTML =
-      '<div class="chart-label">📰 ニュース・感情分析</div>'+
-      '<div class="ts" style="padding:8px 0"><span class="spinner"></span> 読み込み中...</div>';
-    fetch('/api/sentiment/'+ticker).then(r=>r.json()).then(sent=>{
-      if (!sent||!sent.news||!sent.news.length){$('modal-news').style.display='none';return;}
-      $('modal-news').innerHTML=buildSentimentHTML(sent);
-    }).catch(()=>{$('modal-news').style.display='none';});
   } catch(e) {
     $('modal-stats').textContent = 'データ取得失敗: '+e.message;
   }
 }
 
-function buildSentimentHTML(sent) {
-  const color = sent.color||'#8e8e93', label = sent.label||'—', score = sent.score||0;
-  const pct = Math.min(100,Math.max(0,(score+2)/4*100));
-  return `
-    <div class="chart-label" style="display:flex;align-items:center;gap:10px;margin-top:14px">
-      📰 ニュース・感情分析
-      <span style="color:${color};font-weight:700;font-size:12px">${label} (${score>0?'+':''}${score.toFixed(2)})</span>
-    </div>
-    <div class="sent-panel">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub)">
-        <span>弱気</span><span>中立</span><span>強気</span>
-      </div>
-      <div class="sent-score-bar"><div class="sent-score-fill" style="width:${pct}%;background:${color}"></div></div>
-      <div class="ts">ニュース ${sent.count||0}件を分析</div>
-    </div>
-    ${(sent.news||[]).map(n=>`
-      <div class="news-item">
-        <div class="news-title"><a href="${n.link||'#'}" target="_blank" rel="noopener">${n.title||'—'}</a></div>
-        <div class="news-meta">${n.publisher||''} &nbsp;·&nbsp; スコア:
-          <span class="${n.score>0?'news-score-pos':n.score<0?'news-score-neg':''}">${n.score>0?'+':''}${n.score}</span>
-        </div>
-      </div>`).join('')}`;
+async function loadModalFundamentals() {
+  if (!_modalTicker) return;
+  const el = $('modal-fund-body');
+  try {
+    const f = await (await fetch('/api/fundamentals/'+_modalTicker)).json();
+    if (!f || (!f.per && !f.eps && !f.market_cap && !f.pbr)) {
+      el.innerHTML = '<div class="empty">基本情報データなし（yfinance未対応銘柄）<br><span class="ts">※ 投資信託・一部銘柄では取得不可</span></div>';
+      _modalLoaded.fund = true; return;
+    }
+    const fv = (v, unit='') => v != null ? v + unit : '<span class="ts">—</span>';
+    const fvCap = v => {
+      if (v == null) return '<span class="ts">—</span>';
+      if (v >= 1e12) return (v/1e12).toFixed(1) + 'T';
+      if (v >= 1e9)  return (v/1e9).toFixed(1) + 'B';
+      if (v >= 1e6)  return (v/1e6).toFixed(1) + 'M';
+      return v.toLocaleString();
+    };
+    let html = '';
+    html += '<div class="fund-section"><h4>バリュエーション</h4><div class="fund-grid">';
+    html += `<div class="fund-kv"><div class="fk">PER (実績)</div><div class="fv">${fv(f.per,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">PER (予想)</div><div class="fv">${fv(f.forward_per,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">PBR</div><div class="fv">${fv(f.pbr,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">PSR</div><div class="fv">${fv(f.psr,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">時価総額</div><div class="fv">${fvCap(f.market_cap)}</div><div class="fn">${f.currency||''}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">ベータ</div><div class="fv">${fv(f.beta)}</div></div>`;
+    html += '</div></div>';
+    html += '<div class="fund-section"><h4>収益性</h4><div class="fund-grid">';
+    html += `<div class="fund-kv"><div class="fk">ROE</div><div class="fv">${fv(f.roe,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">ROA</div><div class="fv">${fv(f.roa,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">売上総利益率</div><div class="fv">${fv(f.gross_margin,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">営業利益率</div><div class="fv">${fv(f.operating_margin,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">EPS (実績)</div><div class="fv">${fv(f.eps)}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">EPS (予想)</div><div class="fv">${fv(f.forward_eps)}</div></div>`;
+    html += '</div></div>';
+    html += '<div class="fund-section"><h4>配当・成長・レンジ</h4><div class="fund-grid">';
+    html += `<div class="fund-kv"><div class="fk">配当利回り</div><div class="fv">${fv(f.dividend_yield,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">1株配当</div><div class="fv">${fv(f.dividend_per)}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">売上成長率</div><div class="fv">${fv(f.revenue_growth,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">利益成長率</div><div class="fv">${fv(f.earnings_growth,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">52週高値</div><div class="fv">${fv(f['52w_high'])}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">52週安値</div><div class="fv">${fv(f['52w_low'])}</div></div>`;
+    html += '</div></div>';
+    if (f.sector || f.industry) {
+      html += '<div class="fund-section"><h4>属性</h4><div class="fund-grid">';
+      if (f.sector)    html += `<div class="fund-kv"><div class="fk">セクター</div><div class="fv" style="font-size:13px">${f.sector}</div></div>`;
+      if (f.industry)  html += `<div class="fund-kv"><div class="fk">業種</div><div class="fv" style="font-size:13px">${f.industry}</div></div>`;
+      if (f.employees) html += `<div class="fund-kv"><div class="fk">従業員数</div><div class="fv" style="font-size:13px">${f.employees.toLocaleString()}人</div></div>`;
+      html += '</div></div>';
+    }
+    html += '<div class="ts" style="margin-top:4px">※ yfinance遅延データ。投資助言ではありません。</div>';
+    _modalLoaded.fund = true;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="empty">基本情報取得失敗</div>';
+  }
 }
+
+async function loadModalNews() {
+  if (!_modalTicker) return;
+  const el = $('modal-news-body');
+  try {
+    const data = await (await fetch('/api/news/'+_modalTicker)).json();
+    const sent = data.sentiment || {};
+    const news = data.news || [];
+    let html = '';
+    if (sent.label && sent.label !== 'N/A' && news.length > 0) {
+      const color = sent.color || '#8e8e93';
+      const pct = Math.min(100, Math.max(0, (sent.score+2)/4*100));
+      html += `<div class="sent-panel" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600">感情分析</span>
+          <span style="color:${color};font-weight:700;font-size:13px">${sent.label}（スコア: ${sent.score>=0?'+':''}${sent.score}）</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);margin-bottom:4px">
+          <span>弱気</span><span>中立</span><span>強気</span>
+        </div>
+        <div class="sent-score-bar"><div class="sent-score-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="ts" style="margin-top:4px">${news.length}件を「${sent.method||'—'}」で分析</div>
+      </div>`;
+    }
+    if (!news.length) {
+      html += '<div class="empty">ニュースなし</div>';
+    } else {
+      news.forEach(n => {
+        html += `<div class="news-item">
+          <div class="news-title"><a href="${n.link||'#'}" target="_blank" rel="noopener">${n.title||'—'}</a></div>
+          <div class="news-meta">
+            ${n.publisher ? n.publisher + ' &nbsp;·&nbsp; ' : ''}
+            ${n.published ? n.published + ' &nbsp;·&nbsp; ' : ''}
+            スコア: <span class="${n.score>0?'news-score-pos':n.score<0?'news-score-neg':''}">${n.score>=0?'+':''}${n.score}</span>
+          </div>
+        </div>`;
+      });
+    }
+    _modalLoaded.news = true;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="empty">ニュース取得失敗</div>';
+  }
+}
+
+async function loadModalValuation() {
+  if (!_modalTicker) return;
+  const el = $('modal-val-body');
+  try {
+    const f = await (await fetch('/api/fundamentals/'+_modalTicker)).json();
+    const isJp = _modalTicker.endsWith('.T');
+    const fv = (v, unit='') => v != null ? v + unit : '—';
+    let html = '';
+    if (isJp && f.theoretical_price) {
+      const upside = f.theoretical_upside_pct;
+      html += `<div class="val-box">
+        <div class="vb-label">理論株価（AI/簡易推定）</div>
+        <div class="vb-price">¥${Math.round(f.theoretical_price).toLocaleString()}</div>
+        ${upside != null ? `<div style="font-size:15px;font-weight:600;margin-top:4px" class="${upside>=0?'pos':'neg'}">
+          現在値との乖離: ${upside>=0?'+':''}${upside}%</div>` : ''}
+        <div class="vb-note">${f.theoretical_note||''}</div>
+      </div>`;
+    } else if (!isJp && f.target_mean) {
+      const upside = f.target_upside_pct;
+      html += `<div class="val-box">
+        <div class="vb-label">アナリスト目標株価（平均）</div>
+        <div class="vb-price">$${f.target_mean}</div>
+        ${upside != null ? `<div style="font-size:15px;font-weight:600;margin-top:4px" class="${upside>=0?'pos':'neg'}">
+          現在値との乖離: ${upside>=0?'+':''}${upside}%</div>` : ''}
+        <div class="vb-note">※ アナリスト予測。投資助言ではありません。</div>
+      </div>`;
+    }
+    if (!isJp && (f.target_high || f.target_low || f.recommendation || f.analyst_count)) {
+      const recMap = {strongbuy:'強い買い',buy:'買い',hold:'中立',sell:'売り',strongsell:'強い売り'};
+      html += '<div class="fund-section"><h4>アナリスト評価</h4><div class="fund-grid">';
+      if (f.recommendation) html += `<div class="fund-kv"><div class="fk">推奨</div><div class="fv" style="font-size:14px">${recMap[f.recommendation]||f.recommendation}</div></div>`;
+      if (f.analyst_count)  html += `<div class="fund-kv"><div class="fk">アナリスト数</div><div class="fv">${f.analyst_count}名</div></div>`;
+      if (f.target_high)    html += `<div class="fund-kv"><div class="fk">目標高値</div><div class="fv">$${f.target_high}</div></div>`;
+      if (f.target_low)     html += `<div class="fund-kv"><div class="fk">目標安値</div><div class="fv">$${f.target_low}</div></div>`;
+      html += '</div></div>';
+    }
+    html += '<div class="fund-section"><h4>財務サマリー</h4><div class="fund-grid">';
+    html += `<div class="fund-kv"><div class="fk">PER</div><div class="fv">${fv(f.per,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">PBR</div><div class="fv">${fv(f.pbr,'倍')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">ROE</div><div class="fv">${fv(f.roe,'%')}</div></div>`;
+    html += `<div class="fund-kv"><div class="fk">配当利回り</div><div class="fv">${fv(f.dividend_yield,'%')}</div></div>`;
+    html += '</div></div>';
+    if (!html.includes('val-box') && !html.includes('アナリスト')) {
+      html = '<div class="empty">評価データなし（yfinance未対応銘柄）</div>' + html;
+    }
+    html += '<div class="ts" style="margin-top:8px">※ yfinance遅延データ・AI/簡易推定。投資助言ではありません。</div>';
+    _modalLoaded.val = true;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="empty">評価データ取得失敗</div>';
+  }
+}
+
 function closeOverlay() { $('overlay').classList.remove('open'); }
 function closeModal(e)  { if (e.target===$('overlay')) closeOverlay(); }
+
+// ─── Fund Screener ───
+let _fscSigFilter   = 'all';
+let _fscCrossFilter = 'all';
+
+function fscFilter(val, type) {
+  if (type==='sig')   _fscSigFilter   = val;
+  if (type==='cross') _fscCrossFilter = (_fscCrossFilter===val ? 'all' : val);
+  renderFundScreener();
+}
+
+async function loadFundScreener() {
+  try {
+    const [analysis, wl] = await Promise.all([
+      (await fetch('/api/analysis')).json(),
+      (await fetch('/api/watchlist')).json(),
+    ]);
+    window._fscAnalysis = analysis.data || {};
+    window._fscWl = [...(wl.jp||[]), ...(wl.us||[])];
+    renderFundScreener();
+  } catch(e) {
+    $('fsc-body').innerHTML = '<div class="empty">読み込み失敗</div>';
+  }
+}
+
+function renderFundScreener() {
+  const analysis = window._fscAnalysis || {};
+  const wl = window._fscWl || [];
+  const el = $('fsc-body');
+  if (!el) return;
+  if (!wl.length) { el.innerHTML = '<div class="empty">監視銘柄なし</div>'; return; }
+
+  let list = wl.filter(s => {
+    const ac  = analysis[s.ticker] || {};
+    const sig = (ac.signal || 'HOLD').toLowerCase();
+    const cross = ac.cross || '';
+    const sigOk   = _fscSigFilter==='all' || sig===_fscSigFilter;
+    const crossOk = _fscCrossFilter==='all' || cross===_fscCrossFilter;
+    return sigOk && crossOk;
+  });
+
+  // update filter button states
+  document.querySelectorAll('#fs-filters .fb').forEach(b => {
+    const ft = b.dataset.ftype, fv = b.dataset.fval;
+    const active = ft==='sig'   ? _fscSigFilter===fv
+                 : ft==='cross' ? _fscCrossFilter===fv
+                 : false;
+    b.classList.toggle('active', active);
+    if (ft==='sig' && fv==='all' && _fscSigFilter!=='buy' && _fscSigFilter!=='sell') b.classList.add('active');
+    if (ft==='sig' && fv!=='all') b.classList.toggle('active', _fscSigFilter===fv);
+  });
+
+  if (!list.length) { el.innerHTML = '<div class="empty">条件に一致する銘柄なし</div>'; return; }
+
+  const fmt = (v, t) => {
+    if (v == null) return '—';
+    return t.endsWith('.T') ? '¥'+Math.round(v).toLocaleString() : '$'+v.toFixed(2);
+  };
+  let html = '';
+  list.forEach(s => {
+    const ac  = analysis[s.ticker] || {};
+    const sig = ac.signal || 'HOLD';
+    const sigBadge = sig==='BUY' ? '<span class="badge bb">BUY</span>'
+      : sig==='SELL' ? '<span class="badge bs">SELL</span>'
+      : '<span class="badge bh">HOLD</span>';
+    const chg = ac.daily_change_pct;
+    const crossLabel = ac.cross==='golden'
+      ? '<span style="color:var(--g);font-size:10px;font-weight:600">✨ゴールデン</span>'
+      : ac.cross==='dead'
+      ? '<span style="color:var(--r);font-size:10px;font-weight:600">💀デッド</span>'
+      : '';
+    const esc = v => (v||'').replace(/'/g,'\\x27');
+    html += `<div class="fsc-row">
+      <div class="fsc-info" onclick="openChart('${esc(s.ticker)}','${esc(s.name||s.ticker)}')">
+        <div class="fsc-name">${s.name||s.ticker}</div>
+        <div class="fsc-ticker">${s.ticker}</div>
+      </div>
+      <div class="fsc-metrics">
+        <div class="fsc-m">価格: <b>${fmt(ac.price,s.ticker)}</b></div>
+        ${chg!=null?`<div class="fsc-m ${chg>=0?'pos':'neg'}">前日比: <b>${chg>=0?'+':''}${chg.toFixed(2)}%</b></div>`:''}
+        <div class="fsc-m">RSI: <b style="color:${rsiColor(ac.rsi||50)}">${(ac.rsi||0).toFixed(0)}</b></div>
+        ${crossLabel}
+      </div>
+      ${sigBadge}
+    </div>`;
+  });
+  el.innerHTML = html;
+}
 
 // ─── Backtest ───
 async function runBacktest() {
@@ -1333,6 +1645,7 @@ async function gitPull() {
 // ─── Init ───
 loadMarket(); loadStats(); loadAnalysis(); loadSignals();
 startAuto();
+
 </script>
 </body>
 </html>"""
@@ -1563,6 +1876,29 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
             return jsonify({"ok": False, "msg": "未初期化"})
         alert_manager.reset(int((request.get_json() or {}).get("index", -1)))
         return jsonify({"ok": True})
+
+    # ── Fundamentals ──
+
+    @app.route("/api/fundamentals/<ticker>")
+    def api_fundamentals(ticker):
+        from valuation import get_fundamentals
+        return jsonify(get_fundamentals(ticker.upper()))
+
+    # ── News + Sentiment ──
+
+    @app.route("/api/news/<ticker>")
+    def api_news(ticker):
+        from news_fetcher import get_news
+        from sentiment import get_sentiment_from_news
+        t = ticker.upper()
+        name = ""
+        for s in watchlist_manager.get_jp() + watchlist_manager.get_us():
+            if s["ticker"] == t:
+                name = s.get("name", "")
+                break
+        news = get_news(t, name)
+        sent = get_sentiment_from_news(news, t)
+        return jsonify({"news": news, "sentiment": sent})
 
     # ── Backtest ──
 

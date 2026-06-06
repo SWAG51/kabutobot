@@ -26,6 +26,7 @@ logging.basicConfig(
         logging.StreamHandler(),
         logging.FileHandler("kabutobot.log", encoding="utf-8"),
     ],
+    force=True,
 )
 log = logging.getLogger(__name__)
 

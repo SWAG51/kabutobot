@@ -325,6 +325,26 @@ tr:hover td{background:#fafafa}
 .fsc-m{font-size:11px;color:var(--sub);white-space:nowrap}
 .fsc-m b{color:var(--tx)}
 
+/* ── Search Suggestions ── */
+.sc-search-wrap{position:relative}
+.sc-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;
+  border:1px solid var(--bd);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:300;
+  max-height:340px;overflow-y:auto;display:none}
+.sc-suggest.open{display:block}
+.sc-sug-hd{padding:6px 14px 4px;font-size:10px;font-weight:700;color:var(--sub);
+  text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--bd);
+  background:#fafafa;border-radius:10px 10px 0 0}
+.sc-sug-item{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  cursor:pointer;border-bottom:1px solid var(--bd)}
+.sc-sug-item:last-child{border-bottom:none}
+.sc-sug-item:hover,.sc-sug-item.hi{background:#f0f4ff}
+.sc-sug-ticker{font-size:13px;font-weight:700;min-width:58px}
+.sc-sug-name{font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-sug-cat{font-size:10px;color:var(--sub);white-space:nowrap;
+  background:#f5f5f7;padding:2px 7px;border-radius:4px;flex-shrink:0}
+.hl{color:var(--b);font-weight:700}
+
 /* ── Responsive ── */
 @media(max-width:600px){
   .wlg{grid-template-columns:1fr}
@@ -429,10 +449,15 @@ tr:hover td{background:#fafafa}
       <hr style="border:none;border-top:1px solid var(--bd);margin:0 0 16px">
       <!-- 銘柄スクリーナー (全銘柄リスト) -->
       <div style="margin-bottom:14px">
-        <input id="sc-search" type="text" placeholder="🔍 銘柄名・ティッカーで検索（全カテゴリ）..."
-          oninput="filterScreener()"
-          style="width:100%;padding:9px 14px;border:1px solid var(--bd);
-                 border-radius:8px;font-size:13px;outline:none">
+        <div class="sc-search-wrap">
+          <input id="sc-search" type="text" autocomplete="off"
+            placeholder="🔍 検索: ティッカー(AAPL / 7203) · 日本語名(トヨタ) · 英語名(toyota / apple)"
+            oninput="onScSearch(event)" onkeydown="onScSearchKey(event)"
+            onfocus="onScSearchFocus()" onblur="onScSearchBlur()"
+            style="width:100%;padding:9px 14px;border:1px solid var(--bd);
+                   border-radius:8px;font-size:13px;outline:none">
+          <div id="sc-suggest" class="sc-suggest"></div>
+        </div>
       </div>
       <div class="sc-region">
         <button class="sc-rb active" onclick="showRegion('JP')">🇯🇵 日本株</button>
@@ -1556,7 +1581,7 @@ function showRegion(region) {
   scRegion=region; scCategory=null;
   document.querySelectorAll('.sc-rb').forEach((b,i)=>
     b.classList.toggle('active',['JP','US','OTHER'][i]===region));
-  $('sc-search').value='';
+  $('sc-search').value=''; closeSuggest();
   renderScCategories(); renderScStocks();
 }
 function renderScCategories() {
@@ -1570,50 +1595,159 @@ function renderScCategories() {
   }).join('');
 }
 function showCategory(cat) {
-  scCategory=cat; $('sc-search').value='';
+  scCategory=cat; $('sc-search').value=''; closeSuggest();
   document.querySelectorAll('.sc-cat').forEach(b=>
     b.classList.toggle('active',b.textContent.trim().startsWith(cat)));
   renderScStocks();
 }
+// ─── Screener search engine ───
+let _scSugIdx  = -1;
+let _scBlurTid = null;
+
+function _scTokens(q) {
+  return (q||'').toLowerCase().trim().split(/\s+/).filter(Boolean);
+}
+function _scScore(s, tokens) {
+  const tk  = s.ticker.toLowerCase();
+  const tkb = tk.replace('.t','');
+  const nm  = s.name.toLowerCase();
+  const en  = (s.en||'').toLowerCase();
+  let score = 0;
+  for (const t of tokens) {
+    if (!t) continue;
+    if (tk===t || tkb===t)               { score+=100; continue; }
+    if (tk.startsWith(t)||tkb.startsWith(t)) { score+=60; continue; }
+    if (tk.includes(t))                  { score+=30; continue; }
+    if (nm.startsWith(t)||en.startsWith(t)) { score+=25; continue; }
+    if (nm.includes(t))                  { score+=15; continue; }
+    if (en.includes(t))                  { score+=12; continue; }
+    score -= 50; // token matched nothing → exclude
+  }
+  return score;
+}
+function _scSearch(q) {
+  if (!screenerData || !q.trim()) return [];
+  const tokens = _scTokens(q);
+  const seen = new Set(); const results = [];
+  for (const [reg,cats] of Object.entries(screenerData))
+    for (const [cat,arr] of Object.entries(cats))
+      for (const s of arr) {
+        if (seen.has(s.ticker)) continue;
+        const score = _scScore(s, tokens);
+        if (score > 0) { seen.add(s.ticker); results.push({...s,_reg:reg,_cat:cat,_score:score}); }
+      }
+  return results.sort((a,b)=>b._score-a._score);
+}
+function _hlText(text, tokens) {
+  if (!tokens.length) return text;
+  const re = new RegExp('('+tokens.map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')', 'gi');
+  return text.replace(re,'<span class="hl">$1</span>');
+}
+
+function onScSearch(e) {
+  const q = e.target.value;
+  _scSugIdx = -1;
+  if (!q.trim()) { closeSuggest(); renderScStocks(); return; }
+  const results = _scSearch(q);
+  showSuggest(results, q);
+  renderScStocksFromList(results, q);
+}
+function onScSearchFocus() {
+  if (_scBlurTid) { clearTimeout(_scBlurTid); _scBlurTid=null; }
+  const q = ($('sc-search').value||'').trim();
+  if (q) { const r=_scSearch(q); showSuggest(r,q); }
+}
+function onScSearchBlur() {
+  _scBlurTid = setTimeout(closeSuggest, 180);
+}
+function onScSearchKey(e) {
+  const sug = $('sc-suggest');
+  const items = sug ? sug.querySelectorAll('.sc-sug-item') : [];
+  if (e.key==='ArrowDown') {
+    e.preventDefault(); _scSugIdx=Math.min(_scSugIdx+1,items.length-1);
+    items.forEach((el,i)=>el.classList.toggle('hi',i===_scSugIdx));
+  } else if (e.key==='ArrowUp') {
+    e.preventDefault(); _scSugIdx=Math.max(_scSugIdx-1,0);
+    items.forEach((el,i)=>el.classList.toggle('hi',i===_scSugIdx));
+  } else if (e.key==='Enter') {
+    if (_scSugIdx>=0 && items[_scSugIdx]) items[_scSugIdx].click();
+    else { closeSuggest(); renderScStocks(); }
+  } else if (e.key==='Escape') {
+    closeSuggest(); $('sc-search').value=''; renderScStocks();
+  }
+}
+function closeSuggest() {
+  const el = $('sc-suggest');
+  if (el) el.classList.remove('open');
+}
+function showSuggest(results, q) {
+  const el = $('sc-suggest');
+  if (!el) return;
+  const tokens = _scTokens(q);
+  const top = results.slice(0,10);
+  if (!top.length) { el.classList.remove('open'); return; }
+  const rows = top.map(s => {
+    const esc = v=>(v||'').replace(/'/g,'\\x27');
+    const mkt = s.ticker.endsWith('.T')?'JP':'US';
+    const isFlag = mkt==='JP'?'🇯🇵':'🇺🇸';
+    return `<div class="sc-sug-item" onmousedown="selectSuggest('${esc(s.ticker)}','${esc(s.name)}','${mkt}')">
+      <span class="sc-sug-ticker">${isFlag} ${_hlText(s.ticker,tokens)}</span>
+      <span class="sc-sug-name">${_hlText(s.name,tokens)}</span>
+      <span class="sc-sug-cat">${s._cat||''}</span>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="sc-sug-hd">候補 ${results.length}件${results.length>10?' (上位10件表示)':''}</div>${rows}`;
+  el.classList.add('open');
+}
+function selectSuggest(ticker, name, market) {
+  closeSuggest();
+  $('sc-search').value = ticker + ' ' + name;
+  const results = _scSearch(ticker);
+  renderScStocksFromList(results, ticker);
+}
+
 async function renderScStocks(stocks) {
   if (!screenerData) return;
-  const q=($('sc-search').value||'').toLowerCase().trim();
-  let list=stocks;
-  if (!list) {
-    if (q) {
-      const seen=new Set(); list=[];
-      for (const [reg,cats] of Object.entries(screenerData))
-        for (const [cat,arr] of Object.entries(cats))
-          for (const s of arr)
-            if (!seen.has(s.ticker)&&(s.name.toLowerCase().includes(q)||s.ticker.toLowerCase().includes(q)))
-              { seen.add(s.ticker); list.push({...s,_reg:reg,_cat:cat}); }
-    } else {
-      list=(screenerData[scRegion]||{})[scCategory]||[];
-    }
+  const q = ($('sc-search').value||'').trim();
+  if (q) {
+    renderScStocksFromList(_scSearch(q), q);
+    return;
   }
-  const wl=await (await fetch('/api/watchlist')).json();
-  const wlSet=new Set([...wl.jp.map(s=>s.ticker),...wl.us.map(s=>s.ticker)]);
-  const label=q?`検索結果: ${list.length}件`:`${scCategory} (${list.length}件)`;
-  $('sc-list').innerHTML=`
+  const list = stocks || (screenerData[scRegion]||{})[scCategory] || [];
+  await _renderList(list, null, scCategory + ' (' + list.length + '件)');
+}
+async function renderScStocksFromList(list, q) {
+  const tokens = q ? _scTokens(q) : [];
+  const label = q ? `🔍 検索結果: ${list.length}件` : (scCategory + ' (' + list.length + '件)');
+  await _renderList(list, tokens, label);
+}
+async function _renderList(list, tokens, label) {
+  const wl   = await (await fetch('/api/watchlist')).json();
+  const wlSet = new Set([...wl.jp.map(s=>s.ticker),...wl.us.map(s=>s.ticker)]);
+  if (!list.length) {
+    $('sc-list').innerHTML = `<div style="font-size:12px;color:var(--sub);margin-bottom:8px">${label}</div><div class="empty">該当なし</div>`;
+    return;
+  }
+  const hl = (t,tok) => tok&&tok.length ? _hlText(t,tok) : t;
+  $('sc-list').innerHTML = `
     <div style="font-size:12px;color:var(--sub);margin-bottom:8px">${label}</div>
     <div class="sc-list-grid" style="background:var(--card);border-radius:8px;border:1px solid var(--bd)">
       ${list.map(s=>{
-        const inWL=wlSet.has(s.ticker);
-        const mkt=s.ticker.endsWith('.T')?'JP':'US';
-        const esc=v=>(v||'').replace(/'/g,'\\x27');
-        const catBadge=s._cat?`<span class="ts" style="margin-left:8px">${s._cat}</span>`:'';
+        const inWL = wlSet.has(s.ticker);
+        const mkt  = s.ticker.endsWith('.T')?'JP':'US';
+        const esc  = v=>(v||'').replace(/'/g,'\\x27');
+        const catBadge = s._cat ? `<span class="ts" style="margin-left:8px">${s._cat}</span>` : '';
         return `<div class="sc-row">
           <div class="sc-info" onclick="openChart('${esc(s.ticker)}','${esc(s.name)}')">
-            <div class="sc-name">${s.name}${catBadge}</div>
-            <div class="sc-ticker">${s.ticker}</div>
+            <div class="sc-name">${hl(s.name,tokens)}${catBadge}</div>
+            <div class="sc-ticker">${hl(s.ticker,tokens)}</div>
           </div>
           ${inWL
             ?'<span class="badge bb" style="min-width:64px;text-align:center">追加済み</span>'
             :`<button class="btn btn-b btn-sm"
-                onclick="addFromScreener('${esc(s.ticker)}','${esc(s.name)}','${mkt}')">+ 追加</button>`
-          }
+                onclick="addFromScreener('${esc(s.ticker)}','${esc(s.name)}','${mkt}')">+ 追加</button>`}
         </div>`;
-      }).join('')||'<div class="empty">該当なし</div>'}
+      }).join('')}
     </div>`;
 }
 async function filterScreener() { await renderScStocks(); }

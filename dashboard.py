@@ -1176,19 +1176,29 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None) -> Flas
     @app.route("/api/git/pull", methods=["POST"])
     def api_git_pull():
         """GitHub から git pull して bot を再起動"""
-        import subprocess, sys, os, threading
+        import subprocess, os, threading
+        bot_dir = os.path.dirname(os.path.abspath(__file__))
         try:
             result = subprocess.run(
                 ["git", "pull", "--ff-only"],
                 capture_output=True, text=True, timeout=30,
-                cwd=str(__file__).replace("dashboard.py", ""),
+                cwd=bot_dir,
             )
             if result.returncode != 0:
                 return jsonify({"ok": False, "msg": result.stderr.strip() or "git pull 失敗"})
             msg = result.stdout.strip() or "Already up to date."
 
             def _restart():
-                import time, signal
+                import time, sys, signal
+                time.sleep(1)
+                # nohup で自分自身を再起動してから終了
+                subprocess.Popen(
+                    ["nohup", "python", "main.py"],
+                    cwd=bot_dir,
+                    stdout=open(os.path.join(bot_dir, "kabutobot.log"), "a"),
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
                 time.sleep(1)
                 os.kill(os.getpid(), signal.SIGTERM)
 

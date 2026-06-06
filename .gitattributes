@@ -1,0 +1,12 @@
+# 全テキストファイルをLF統一（Windows/Linux混在対策）
+* text=auto eol=lf
+*.py   text eol=lf
+*.json text eol=lf
+*.txt  text eol=lf
+*.md   text eol=lf
+*.env  text eol=lf
+
+# バイナリ（変換しない）
+*.png binary
+*.jpg binary
+*.pyc binary

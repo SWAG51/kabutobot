@@ -261,7 +261,7 @@ tr:hover td{background:#fafafa}
     <div class="h-actions">
       <button class="btn btn-outline" id="auto-btn" onclick="toggleAuto()">⏱ 自動更新: ON</button>
       <button class="btn btn-b" id="scan-btn" onclick="manualScan()">🔄 今すぐスキャン</button>
-      <button class="btn btn-outline" id="pull-btn" onclick="gitPull()" title="GitHubから最新コードを取得して再起動">⬇️ GitHub更新</button>
+      <button class="btn btn-outline" id="pull-btn" onclick="gitPull()" title="GitHubから最新コードを取得して再起動">⬇️ アップデート</button>
       <span class="ts" id="ts" style="min-width:120px;text-align:right"></span>
     </div>
   </div>
@@ -1030,7 +1030,7 @@ async function gitPull() {
   } catch(e) {
     alert('通信エラー: ' + e.message);
   } finally {
-    btn.innerHTML = '⬇️ GitHub更新';
+    btn.innerHTML = '⬇️ アップデート';
     btn.disabled = false;
   }
 }

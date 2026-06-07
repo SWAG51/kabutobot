@@ -2058,16 +2058,12 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
             msg = result.stdout.strip() or "Already up to date."
 
             def _restart():
-                import time, signal
-                old_pid = os.getpid()
-                # 旧プロセスを先に終了させてからポートを解放し、新プロセスを起動
+                import time
+                time.sleep(1)
                 subprocess.Popen(
-                    ["bash", "-c",
-                     f"sleep 4 && cd {bot_dir} && nohup python main.py >> kabutobot.log 2>&1 &"],
+                    ["sudo", "systemctl", "restart", "kabutobot"],
                     start_new_session=True,
                 )
-                time.sleep(1)
-                os.kill(old_pid, signal.SIGTERM)
 
             threading.Thread(target=_restart, daemon=True).start()
             return jsonify({"ok": True, "msg": msg})

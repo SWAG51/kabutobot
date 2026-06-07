@@ -35,7 +35,7 @@ NEW_SHORT="${NEW_HASH:0:7}"
 # ─── 変更なしの場合も再起動 ───
 if [ "$OLD_HASH" = "$NEW_HASH" ]; then
     log "✅ 変更なし（最新: $NEW_SHORT）→ サービス再起動のみ実行"
-    if sudo systemctl restart kabutobot 2>&1 | tee -a "$LOG"; then
+    if systemctl --user restart kabutobot 2>&1 | tee -a "$LOG"; then
         log "  ✅ kabutobot 再起動完了"
     else
         log "  ❌ kabutobot 再起動失敗"

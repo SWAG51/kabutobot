@@ -2058,11 +2058,14 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
             msg = result.stdout.strip() or "Already up to date."
 
             def _restart():
-                import time
+                import time, os
                 time.sleep(1)
+                env = os.environ.copy()
+                env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
                 subprocess.Popen(
-                    ["sudo", "systemctl", "restart", "kabutobot"],
+                    ["systemctl", "--user", "restart", "kabutobot"],
                     start_new_session=True,
+                    env=env,
                 )
 
             threading.Thread(target=_restart, daemon=True).start()

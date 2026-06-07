@@ -7,3 +7,4 @@ requests>=2.31.0
 pytz>=2024.1
 feedparser>=6.0.0
 vaderSentiment>=3.3.2
+xlrd>=2.0.1

@@ -541,6 +541,7 @@ tr:hover td{background:#fafafa}
       <button class="mtb" onclick="openModalTab('fund')">📋 基本情報</button>
       <button class="mtb" onclick="openModalTab('news')">📰 ニュース</button>
       <button class="mtb" onclick="openModalTab('val')">💰 評価・分析</button>
+      <button class="mtb" id="tdnet-tab-btn" style="display:none" onclick="openModalTab('tdnet')">📢 適時開示</button>
       <button class="mtb" onclick="openModalTab('bt')">🧪 バックテスト</button>
     </div>
     <!-- Tab: チャート -->
@@ -575,6 +576,10 @@ tr:hover td{background:#fafafa}
       <div id="modal-backtest">
         <div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>
       </div>
+    </div>
+    <!-- Tab: 適時開示 -->
+    <div class="mtc" id="mtc-tdnet">
+      <div id="modal-tdnet-body"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
     </div>
   </div>
 </div>
@@ -1114,34 +1119,44 @@ let _modalTicker = null;
 let _modalLoaded = {chart:false, fund:false, news:false, val:false};
 
 function openModalTab(name) {
-  const tabNames = ['chart','fund','news','val','bt'];
-  document.querySelectorAll('.mtb').forEach((b,i) =>
-    b.classList.toggle('active', tabNames[i] === name));
+  document.querySelectorAll('.mtb').forEach(b =>
+    b.classList.toggle('active', b.textContent.trim() !== '' &&
+      b.getAttribute('onclick') === `openModalTab('${name}')`));
   document.querySelectorAll('.mtc').forEach(c => c.classList.remove('active'));
   const el = $('mtc-'+name);
   if (el) el.classList.add('active');
-  if (name==='fund' && !_modalLoaded.fund) loadModalFundamentals();
-  if (name==='news' && !_modalLoaded.news) loadModalNews();
-  if (name==='val'  && !_modalLoaded.val)  loadModalValuation();
+  if (name==='fund'  && !_modalLoaded.fund)  loadModalFundamentals();
+  if (name==='news'  && !_modalLoaded.news)  loadModalNews();
+  if (name==='val'   && !_modalLoaded.val)   loadModalValuation();
+  if (name==='tdnet' && !_modalLoaded.tdnet) loadModalTdnet();
 }
 
 async function openChart(ticker, name) {
   _modalTicker = ticker;
   _btTicker    = ticker;
-  _modalLoaded = {chart:false, fund:false, news:false, val:false};
+  _modalLoaded = {chart:false, fund:false, news:false, val:false, tdnet:false};
   const dispName = name && name !== ticker ? name : ticker;
   $('modal-title').textContent = dispName;
   $('modal-sub').textContent   = ticker + ' | 分析ダッシュボード';
   $('modal-stats').innerHTML   = '<span class="spinner"></span>';
   $('modal-pts').innerHTML     = '';
-  $('modal-fund-body').innerHTML = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
-  $('modal-news-body').innerHTML = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
-  $('modal-val-body').innerHTML  = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
-  $('modal-backtest').innerHTML  = '<div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>';
+  $('modal-fund-body').innerHTML  = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-news-body').innerHTML  = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-val-body').innerHTML   = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-tdnet-body').innerHTML = '<div class="empty"><span class="spinner"></span> 読み込み中...</div>';
+  $('modal-backtest').innerHTML   = '<div class="ts">「実行」ボタンで過去1年のシミュレーション結果を表示します</div>';
   const btn = $('bt-btn');
   if (btn) { btn.innerHTML = '実行'; btn.disabled = false; }
-  document.querySelectorAll('.mtb').forEach((b,i) => b.classList.toggle('active', i===0));
-  document.querySelectorAll('.mtc').forEach((c,i) => c.classList.toggle('active', i===0));
+  // 適時開示タブはJP株のみ表示
+  const tdnetBtn = $('tdnet-tab-btn');
+  if (tdnetBtn) tdnetBtn.style.display = ticker.endsWith('.T') ? '' : 'none';
+  // チャートタブをアクティブに戻す
+  document.querySelectorAll('.mtb').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.mtc').forEach(c => c.classList.remove('active'));
+  const chartBtn = document.querySelector('.mtb[onclick="openModalTab(\'chart\')"]');
+  if (chartBtn) chartBtn.classList.add('active');
+  const chartTab = $('mtc-chart');
+  if (chartTab) chartTab.classList.add('active');
   $('overlay').classList.add('open');
 
   try {
@@ -1301,7 +1316,9 @@ async function loadModalNews() {
     const data = await (await fetch('/api/news/'+_modalTicker)).json();
     const sent = data.sentiment || {};
     const news = data.news || [];
-    let html = '';
+    const _attStars = news.length >= 6 ? '★★★' : news.length >= 3 ? '★★☆' : news.length >= 1 ? '★☆☆' : '☆☆☆';
+    const _attLabel = news.length >= 6 ? '高' : news.length >= 3 ? '中' : news.length >= 1 ? '低' : '—';
+    let html = `<div style="margin-bottom:10px;font-size:12px;color:var(--sub)">📰 直近ニュース <strong>${news.length}件</strong> &nbsp; 注目度: <span style="color:var(--y)">${_attStars}</span> ${_attLabel}</div>`;
     if (sent.label && sent.label !== 'N/A' && news.length > 0) {
       const color = sent.color || '#8e8e93';
       const pct = Math.min(100, Math.max(0, (sent.score+2)/4*100));
@@ -1384,10 +1401,41 @@ async function loadModalValuation() {
       html = '<div class="empty">評価データなし（yfinance未対応銘柄）</div>' + html;
     }
     html += '<div class="ts" style="margin-top:8px">※ yfinance遅延データ・AI/簡易推定。投資助言ではありません。</div>';
+    try {
+      const cmt = await (await fetch('/api/auto_comment/'+_modalTicker)).json();
+      if (cmt.comment) {
+        html += `<div style="margin-top:12px;padding:10px 14px;background:#f0f8ff;border-radius:8px;border-left:3px solid var(--b);font-size:12px;line-height:1.6">${cmt.comment}</div>`;
+      }
+    } catch(e) {}
     _modalLoaded.val = true;
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<div class="empty">評価データ取得失敗</div>';
+  }
+}
+
+async function loadModalTdnet() {
+  if (!_modalTicker) return;
+  const el = $('modal-tdnet-body');
+  try {
+    const data = await (await fetch('/api/tdnet/'+_modalTicker)).json();
+    const items = data.items || [];
+    if (!items.length) {
+      el.innerHTML = '<div class="empty">適時開示情報なし（またはデータ未取得）</div><div class="ts" style="margin-top:8px">※ やのしん個人運営APIのデータです。内容は必ず公式(TDnet)でご確認ください。</div>';
+      _modalLoaded.tdnet = true; return;
+    }
+    let html = `<div class="ts" style="margin-bottom:10px">TDnet適時開示 ${items.length}件 (最大20件) &nbsp;※ やのしん無料API・参考情報</div>`;
+    html += items.map(it => `<div class="news-item">
+      <div class="news-title">${it.url
+        ? `<a href="${it.url}" target="_blank" rel="noopener">${it.title||'—'}</a>`
+        : (it.title||'—')}</div>
+      <div class="news-meta">${it.date||''}</div>
+    </div>`).join('');
+    html += '<div class="ts" style="margin-top:8px">※ データはやのしん個人運営APIから取得。内容は必ず公式TDnetでご確認ください。</div>';
+    _modalLoaded.tdnet = true;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="empty">適時開示取得失敗</div>';
   }
 }
 
@@ -1601,8 +1649,10 @@ function showCategory(cat) {
   renderScStocks();
 }
 // ─── Screener search engine ───
-let _scSugIdx  = -1;
-let _scBlurTid = null;
+let _scSugIdx       = -1;
+let _scBlurTid      = null;
+let _scSearchTid    = null;
+let _scLastSugResults = [];
 
 function _scTokens(q) {
   return (q||'').toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -1644,18 +1694,34 @@ function _hlText(text, tokens) {
   return text.replace(re,'<span class="hl">$1</span>');
 }
 
+async function _fetchScSearch(q) {
+  if (!q.trim()) return [];
+  try {
+    const r = await (await fetch('/api/stock_search?q='+encodeURIComponent(q)+'&limit=30')).json();
+    return (r.results||[]).map(s=>({...s,
+      _cat: s.sector33||(s.ticker.endsWith('.T')?'JP株':'US株'),
+      _reg: s.ticker.endsWith('.T')?'JP':'US',
+    }));
+  } catch(e) { return []; }
+}
 function onScSearch(e) {
   const q = e.target.value;
   _scSugIdx = -1;
-  if (!q.trim()) { closeSuggest(); renderScStocks(); return; }
-  const results = _scSearch(q);
-  showSuggest(results, q);
-  renderScStocksFromList(results, q);
+  if (!q.trim()) { closeSuggest(); renderScStocks(); _scLastSugResults=[]; return; }
+  if (_scSearchTid) clearTimeout(_scSearchTid);
+  _scSearchTid = setTimeout(async () => {
+    const results = await _fetchScSearch(q);
+    _scLastSugResults = results;
+    showSuggest(results, q);
+    renderScStocksFromList(results, q);
+  }, 250);
 }
 function onScSearchFocus() {
   if (_scBlurTid) { clearTimeout(_scBlurTid); _scBlurTid=null; }
   const q = ($('sc-search').value||'').trim();
-  if (q) { const r=_scSearch(q); showSuggest(r,q); }
+  if (!q) return;
+  if (_scLastSugResults.length) { showSuggest(_scLastSugResults, q); }
+  else { onScSearch({target:{value:q}}); }
 }
 function onScSearchBlur() {
   _scBlurTid = setTimeout(closeSuggest, 180);
@@ -1702,8 +1768,8 @@ function showSuggest(results, q) {
 function selectSuggest(ticker, name, market) {
   closeSuggest();
   $('sc-search').value = ticker + ' ' + name;
-  const results = _scSearch(ticker);
-  renderScStocksFromList(results, ticker);
+  const found = _scLastSugResults.filter(s=>s.ticker===ticker);
+  renderScStocksFromList(found.length ? found : [{ticker,name,_cat:market}], ticker);
 }
 
 async function renderScStocks(stocks) {
@@ -1790,6 +1856,11 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
                alert_manager=None) -> Flask:
     app = Flask(__name__)
     app.logger.setLevel(logging.WARNING)
+    try:
+        import stock_master as _sm
+        _sm.ensure_master_fresh()
+    except Exception:
+        pass
 
     @app.route("/")
     def index():
@@ -2041,6 +2112,53 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
         from backtest import run_backtest
         return jsonify(run_backtest(ticker.upper()))
 
+    # ── Stock Master Search ──
+
+    @app.route("/api/stock_search")
+    def api_stock_search():
+        from stock_master import search_jp, search_us
+        q = (request.args.get("q") or "").strip()
+        try:
+            limit = min(int(request.args.get("limit", 20) or 20), 50)
+        except Exception:
+            limit = 20
+        if not q:
+            return jsonify({"results": []})
+        jp = search_jp(q, limit=limit)
+        us = search_us(q, limit=min(limit, 15))
+        jp_tickers = {j["ticker"] for j in jp}
+        merged = jp + [u for u in us if u["ticker"] not in jp_tickers]
+        return jsonify({"results": merged[:limit]})
+
+    # ── TDnet 適時開示 ──
+
+    @app.route("/api/tdnet/<ticker>")
+    def api_tdnet(ticker):
+        from tdnet import get_tdnet
+        return jsonify({"items": get_tdnet(ticker.upper())})
+
+    # ── 自動コメント ──
+
+    @app.route("/api/auto_comment/<ticker>")
+    def api_auto_comment(ticker):
+        import auto_comment as _ac
+        t = ticker.upper()
+        analysis = {}
+        if ANALYSIS_CACHE_FILE.exists():
+            try:
+                d = json.loads(ANALYSIS_CACHE_FILE.read_text(encoding="utf-8"))
+                analysis = (d.get("data") or {}).get(t, {})
+            except Exception:
+                pass
+        sentiment = {}
+        if SENTIMENT_CACHE_FILE.exists():
+            try:
+                d = json.loads(SENTIMENT_CACHE_FILE.read_text(encoding="utf-8"))
+                sentiment = (d.get("data") or {}).get(t, {})
+            except Exception:
+                pass
+        return jsonify({"comment": _ac.generate(analysis, sentiment)})
+
     # ── Git Pull / Scan / Log ──
 
     @app.route("/api/git/pull", methods=["POST"])
@@ -2048,14 +2166,21 @@ def create_app(trader, watchlist_manager, notifier_mod=None, agent=None,
         import subprocess, os, threading
         bot_dir = os.path.dirname(os.path.abspath(__file__))
         try:
-            result = subprocess.run(
-                ["git", "pull", "--ff-only"],
+            fetch_r = subprocess.run(
+                ["git", "fetch", "origin", "master"],
                 capture_output=True, text=True, timeout=30,
                 cwd=bot_dir,
             )
-            if result.returncode != 0:
-                return jsonify({"ok": False, "msg": result.stderr.strip() or "git pull 失敗"})
-            msg = result.stdout.strip() or "Already up to date."
+            if fetch_r.returncode != 0:
+                return jsonify({"ok": False, "msg": fetch_r.stderr.strip() or "git fetch 失敗"})
+            reset_r = subprocess.run(
+                ["git", "reset", "--hard", "origin/master"],
+                capture_output=True, text=True, timeout=30,
+                cwd=bot_dir,
+            )
+            if reset_r.returncode != 0:
+                return jsonify({"ok": False, "msg": reset_r.stderr.strip() or "git reset 失敗"})
+            msg = reset_r.stdout.strip() or "最新に更新しました。"
 
             def _restart():
                 import time, os
